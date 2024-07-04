@@ -15,19 +15,21 @@ module type Extended = sig
   val run : 'a t -> state -> 'a * state
 end
 
-module Memory : sig
-  type t
+module rec Choice : (Extended with type state = State.t) = struct
+  type state = State.t
+  type 'a t = state -> 'a * state
 
-  val create : int -> t
-  val store : t -> int -> int -> unit
-end = struct
-  type t = int array
+  let return (v : 'a) : 'a t = fun (s : state) -> (v, s)
 
-  let create n = Array.make n 0
-  let store m n v = Array.set m n v
+  let bind (v : 'a t) (f : 'a -> 'b t) : 'b t =
+   fun s ->
+    let v, s = v s in
+    (f v) (State.incr s)
+
+  let run (v : 'a t) (s : state) : 'a * state = v s
 end
 
-module State : sig
+and State : sig
   type t
 
   val init : Memory.t ref -> t
@@ -42,18 +44,18 @@ end = struct
   let incr s = { s with n = succ s.n }
 end
 
-module Choice : Extended with type state = State.t = struct
-  type state = State.t
-  type 'a t = state -> 'a * state
+and Memory : sig
+  type t
 
-  let return (v : 'a) : 'a t = fun (s : state) -> (v, s)
+  val create : int -> t
+  val store : t -> int -> int -> unit
+  val dummy : t -> int Choice.t
+end = struct
+  type t = int array
 
-  let bind (v : 'a t) (f : 'a -> 'b t) : 'b t =
-   fun s ->
-    let v, s = v s in
-    (f v) (State.incr s)
-
-  let run (v : 'a t) (s : state) : 'a * state = v s
+  let create n = Array.make n 0
+  let store m n v = Array.set m n v
+  let dummy _m = Choice.return 0
 end
 
 let ( let* ) = Choice.bind
